@@ -1,0 +1,2 @@
+# Stryktipset-ai
+Analys
