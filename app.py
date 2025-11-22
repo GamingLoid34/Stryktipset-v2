@@ -1,19 +1,12 @@
 import streamlit as st
-import subprocess
-import sys
+import requests
+import base64
+import json
 from PIL import Image
-
-# --- NINJA-INSTALLATION (Denna funkar nu med Python 3.10!) ---
-try:
-    import google.generativeai as genai
-except ImportError:
-    # Om verktyget saknas, installera det tyst i bakgrunden
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "google-generative-ai"])
-    import google.generativeai as genai
+import io
 
 # --- SID-INSTÄLLNINGAR ---
 st.set_page_config(page_title="Stryktips-AI", page_icon="⚽")
-
 st.title("⚽ Stryktips-AI")
 st.write("Ladda upp din kupongbild så analyserar AI:n bästa raden.")
 
@@ -22,9 +15,44 @@ with st.sidebar:
     st.header("⚙️ Inställningar")
     api_key = st.text_input("Din Gemini API-nyckel", type="password")
     st.caption("Hämta gratis på: [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)")
-    
     st.divider()
     budget = st.selectbox("Budget", ["64 kr (64 rader)", "128 kr (128 rader)", "256 kr (256 rader)"])
+
+# --- FUNKTIONER ---
+def image_to_base64(image):
+    buffered = io.BytesIO()
+    image.save(buffered, format="JPEG")
+    return base64.b64encode(buffered.getvalue()).decode()
+
+def call_gemini_api(api_key, image, prompt):
+    # Vi pratar direkt med Google via deras webb-adress istället för bibliotek
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+    
+    headers = {'Content-Type': 'application/json'}
+    
+    # Gör om bilden till text (base64) så vi kan skicka den
+    img_b64 = image_to_base64(image)
+    
+    data = {
+        "contents": [{
+            "parts": [
+                {"text": prompt},
+                {
+                    "inline_data": {
+                        "mime_type": "image/jpeg",
+                        "data": img_b64
+                    }
+                }
+            ]
+        }]
+    }
+    
+    response = requests.post(url, headers=headers, data=json.dumps(data))
+    
+    if response.status_code == 200:
+        return response.json()['candidates'][0]['content']['parts'][0]['text']
+    else:
+        return f"Error: {response.status_code} - {response.text}"
 
 # --- HUVUDPROGRAM ---
 uploaded_file = st.file_uploader("Ladda upp bild på kupongen", type=["jpg", "png", "jpeg"])
@@ -40,23 +68,6 @@ if uploaded_file:
             
         with st.spinner("AI:n analyserar odds och streck..."):
             try:
-                genai.configure(api_key=api_key)
-                
-                # Vi testar modeller i tur och ordning
-                models_to_try = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
-                active_model = None
-                
-                for m in models_to_try:
-                    try:
-                        test_model = genai.GenerativeModel(m)
-                        active_model = test_model
-                        break
-                    except:
-                        continue
-                
-                if not active_model:
-                    active_model = genai.GenerativeModel('gemini-1.5-flash-latest')
-
                 prompt = f"""
                 Du är en expert på Stryktipset. Analysera denna bild.
                 BUDGET: {budget}
@@ -80,9 +91,10 @@ if uploaded_file:
                 Gör en tydlig tabell med Match 1-13 och tecken (1, X, 2).
                 """
                 
-                response = active_model.generate_content([prompt, image])
+                result = call_gemini_api(api_key, image, prompt)
+                
                 st.markdown("---")
-                st.markdown(response.text)
+                st.markdown(result)
                 st.success("Analys klar!")
 
             except Exception as e:
