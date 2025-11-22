@@ -1,17 +1,6 @@
 import streamlit as st
-import subprocess
-import sys
+import google.generativeai as genai
 from PIL import Image
-
-# --- NINJA-INSTALLATION ---
-# Vi tvingar in google-biblioteket om servern vägrade installera det innan
-try:
-    import google.generativeai as genai
-except ImportError:
-    st.toast("🔧 Installerar AI-verktyg... Vänta lite!", icon="🤖")
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "google-generative-ai"])
-    import google.generativeai as genai
-    st.rerun() # Starta om appen när det är klart
 
 # --- SID-INSTÄLLNINGAR ---
 st.set_page_config(page_title="Stryktips-AI", page_icon="⚽")
@@ -24,11 +13,10 @@ with st.sidebar:
     st.header("⚙️ Inställningar")
     api_key = st.text_input("Din Gemini API-nyckel", type="password")
     st.caption("Hämta gratis på: [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)")
-    
     st.divider()
     budget = st.selectbox("Budget", ["64 kr (64 rader)", "128 kr (128 rader)", "256 kr (256 rader)"])
 
-# --- HUVUDPROGRAMMET ---
+# --- HUVUDPROGRAM ---
 uploaded_file = st.file_uploader("Ladda upp bild på kupongen", type=["jpg", "png", "jpeg"])
 
 if uploaded_file:
@@ -44,7 +32,7 @@ if uploaded_file:
             try:
                 genai.configure(api_key=api_key)
                 
-                # Försök hitta en modell som fungerar
+                # Vi testar modeller i tur och ordning
                 models_to_try = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
                 active_model = None
                 
